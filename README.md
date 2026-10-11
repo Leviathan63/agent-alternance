@@ -23,7 +23,7 @@ Workflow [n8n](https://n8n.io) qui cherche chaque jour à 8h des offres d'altern
 | La Bonne Alternance | `romes` | Codes [ROME](https://www.francetravail.fr/candidat/en-savoir-plus/le-code-rome.html) des métiers visés (défaut : réseau/télécom/systèmes) |
 | Google Jobs (SerpAPI) | `location` | Ta ville, ex. `Paris, Île-de-France, France` |
 | Google Jobs (SerpAPI) | `q` | Mots-clés de recherche |
-| Nœud IA (prompt) | `TA_VILLE` + profil | Ta ville, ta formation et tes compétences |
+| Nœud IA (prompt) | `TA_FORMATION`, `TON_ANNEE`, `TA_VILLE`, `TES_COMPETENCES` | Ta formation (ex. `BUT Réseaux et Télécommunications`), ton année (ex. `2e année`), ta ville et tes compétences (ex. `Cisco, routage, VLAN, cybersécurité`) |
 
 Pour trouver les coordonnées d'une ville : clic droit sur le lieu dans Google Maps, la latitude et la longitude s'affichent en premier.
 
