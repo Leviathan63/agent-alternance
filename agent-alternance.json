@@ -1,0 +1,452 @@
+{
+  "name": "Agent alternance",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -900,
+        -260
+      ],
+      "id": "e609552b-a738-4b9b-965c-72bfe7672827",
+      "name": "Tous les jours à 8h"
+    },
+    {
+      "parameters": {
+        "url": "https://api.apprentissage.beta.gouv.fr/api/job/v1/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "romes",
+              "value": "I1401,M1801,M1802,M1810"
+            },
+            {
+              "name": "latitude",
+              "value": "TA_LATITUDE"
+            },
+            {
+              "name": "longitude",
+              "value": "TA_LONGITUDE"
+            },
+            {
+              "name": "radius",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -680,
+        -360
+      ],
+      "id": "f26e523f-025c-493d-bf16-75a46e4eda61",
+      "name": "La Bonne Alternance",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_jobs"
+            },
+            {
+              "name": "q",
+              "value": "alternance réseau OR télécom OR cybersécurité OR administrateur systèmes"
+            },
+            {
+              "name": "location",
+              "value": "TA_VILLE, TA_REGION, France"
+            },
+            {
+              "name": "hl",
+              "value": "fr"
+            },
+            {
+              "name": "gl",
+              "value": "fr"
+            },
+            {
+              "name": "chips",
+              "value": "date_posted:week"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -680,
+        -160
+      ],
+      "id": "ac2b8ed6-456f-4322-a2fa-c865a54b768c",
+      "name": "Google Jobs (SerpAPI)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise la réponse de La Bonne Alternance (offres + candidatures spontanées)\nconst out = [];\nfor (const item of $input.all()) {\n  const data = item.json;\n  if (!data || data.error) continue; // l'API a échoué : on ignore cette source\n\n  for (const o of data.jobs || []) {\n    const id = o.identifier?.id || o.apply?.url;\n    if (!id) continue;\n    out.push({ json: {\n      id: 'lba-' + id,\n      source: 'La Bonne Alternance',\n      type: 'Offre',\n      titre: o.offer?.title || 'Sans titre',\n      entreprise: o.workplace?.name || o.workplace?.legal_name || 'Non renseigné',\n      secteur: o.workplace?.domain?.naf?.label || o.domain?.naf?.label || 'Non renseigné',\n      adresse: o.workplace?.location?.address || 'Non renseigné',\n      description: o.offer?.description || 'Pas de description.',\n      url: o.apply?.url || 'Non renseigné',\n    }});\n  }\n\n  for (const r of data.recruiters || []) {\n    const id = r.identifier?.id || r.workplace?.siret || r.apply?.url;\n    if (!id) continue;\n    const nom = r.workplace?.name || r.workplace?.legal_name || 'Entreprise inconnue';\n    out.push({ json: {\n      id: 'lba-rec-' + id,\n      source: 'La Bonne Alternance',\n      type: 'Candidature spontanée',\n      titre: 'Candidature spontanée — ' + nom,\n      entreprise: nom,\n      secteur: r.workplace?.domain?.naf?.label || r.domain?.naf?.label || 'Non renseigné',\n      adresse: r.workplace?.location?.address || 'Non renseigné',\n      description: \"Entreprise susceptible de recruter en alternance (pas d'offre publiée). Juge selon le secteur d'activité.\",\n      url: r.apply?.url || 'Non renseigné',\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        -360
+      ],
+      "id": "3831661f-d25a-4ab2-8e0b-2274e548710f",
+      "name": "Normaliser LBA",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise la réponse Google Jobs (SerpAPI)\nconst out = [];\nfor (const item of $input.all()) {\n  const data = item.json;\n  if (!data || data.error) continue;\n\n  for (const o of data.jobs_results || []) {\n    const url = o.apply_options?.[0]?.link || o.share_link || o.source_link;\n    const id = o.job_id || url;\n    if (!id) continue;\n    out.push({ json: {\n      id: 'gj-' + id,\n      source: 'Google Jobs',\n      type: 'Offre',\n      titre: o.title || 'Sans titre',\n      entreprise: o.company_name || 'Non renseigné',\n      secteur: 'Non renseigné',\n      adresse: o.location || 'Non renseigné',\n      description: o.description || 'Pas de description.',\n      url: url || 'Non renseigné',\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        -160
+      ],
+      "id": "f5d49f4c-3600-49e6-8243-93b169fe14f5",
+      "name": "Normaliser Google Jobs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        -260
+      ],
+      "id": "77ddde01-29db-4986-a235-1c4bc2fa3c98",
+      "name": "Fusionner les sources"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ne garde que les offres jamais vues.\n// ⚠️ La mémoire (staticData) n'est enregistrée que lors des exécutions automatiques\n// (workflow actif), pas lors des tests manuels avec \"Execute workflow\".\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.seenIds) staticData.seenIds = [];\n\nconst dejaVus = new Set(staticData.seenIds);\nconst nouvelles = [];\n\nfor (const item of $input.all()) {\n  const o = item.json;\n  if (!o.id || dejaVus.has(o.id)) continue; // ignore les doublons et les éléments vides\n  dejaVus.add(o.id);\n  staticData.seenIds.push(o.id);\n\n  nouvelles.push({ json: {\n    ...o,\n    // on limite la taille pour ne pas surcharger le modèle local\n    description: String(o.description).slice(0, 1500),\n  }});\n}\n\n// On garde seulement les 1000 derniers IDs\nif (staticData.seenIds.length > 1000) {\n  staticData.seenIds = staticData.seenIds.slice(-1000);\n}\n\nconsole.log(`${nouvelles.length} nouvelle(s) offre(s) — ${staticData.seenIds.length} IDs en mémoire`);\nreturn nouvelles;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        -260
+      ],
+      "id": "8c1e0ae4-9a68-4a98-8430-e994d92126e2",
+      "name": "Garder les nouvelles offres"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        200,
+        -260
+      ],
+      "id": "c7140cca-67d9-47c9-b79c-5c2d2f339680",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu es un assistant qui trie des offres d'alternance.\n\nProfil du candidat : étudiant en BUT Réseaux et Télécommunications (2e année), basé à TA_VILLE, cherche une alternance. Compétences : Cisco, routage, VLAN, télécoms, administration systèmes et réseaux, bases en cybersécurité.\n\nOffre à évaluer :\nType : {{ $json.type }}\nTitre : {{ $json.titre }}\nEntreprise : {{ $json.entreprise }}\nSecteur : {{ $json.secteur }}\nLieu : {{ $json.adresse }}\nDescription : {{ $json.description }}\n\nDonne un score de pertinence de 1 à 5 :\n1 = Aucun rapport avec le domaine (ou pas une alternance)\n2 = Rapport lointain ou peu probable\n3 = Rapport possible, à considérer\n4 = Bon rapport avec le profil\n5 = Correspond très bien au profil\n\nRéponds UNIQUEMENT avec cet objet JSON, sans texte avant ni après, raison en une phrase :\n{\"score\": 0, \"raison\": \"...\"}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        440,
+        -160
+      ],
+      "id": "a87d2506-fcd0-4455-b12e-b14d5d0d8f03",
+      "name": "Évaluer l'offre (IA)"
+    },
+    {
+      "parameters": {
+        "model": "gpt-oss:latest",
+        "options": {
+          "temperature": 0.2,
+          "think": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [
+        440,
+        60
+      ],
+      "id": "35febd46-4046-464e-acb1-691f03c702b5",
+      "name": "Ollama Model"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupère l'offre en cours dans la boucle + la réponse de l'IA\nconst offre = $('Loop Over Items').first().json;\nconst texte = String($input.first().json.text || '');\n\nlet ia;\ntry {\n  const debut = texte.indexOf('{');\n  const fin = texte.lastIndexOf('}');\n  if (debut === -1 || fin === -1) throw new Error('Pas de JSON');\n  ia = JSON.parse(texte.substring(debut, fin + 1));\n  ia.score = Number(ia.score) || 0;\n  ia.raison = String(ia.raison || '').slice(0, 500);\n} catch (e) {\n  ia = { score: 0, raison: 'Erreur de formatage IA. Réponse brute : ' + texte.slice(0, 300) };\n}\n\nreturn [{ json: { ...offre, ia } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -160
+      ],
+      "id": "419eaffa-b01d-4ada-9b21-38c8a889c0b0",
+      "name": "Lire la réponse IA"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "886a0130-9f2c-4a69-b5f9-d0e298440bd4",
+              "leftValue": "={{ $json.ia.score }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        -160
+      ],
+      "id": "55b28875-66c5-490b-823e-beb08c7f0212",
+      "name": "Score ≥ 3 ?"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=🚨 **NOUVELLE ALTERNANCE — {{ $json.ia.score }}/5** 🚨\n\n**Poste :** {{ $json.titre }}\n**Entreprise :** {{ $json.entreprise }}\n**Lieu :** {{ $json.adresse }}\n**Source :** {{ $json.source }} ({{ $json.type }})\n\n🧠 **Avis de l'IA :** {{ $json.ia.raison }}\n\n🔗 {{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        -260
+      ],
+      "id": "854e2fc7-d053-49a5-abd5-39e076244827",
+      "name": "Envoyer sur Discord",
+      "webhookId": "48a8f721-9ee8-4967-8155-8143191dbc20",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Agent alternance\n1. Crée les 2 credentials (voir le guide) et sélectionne-les dans les nœuds HTTP\n2. Vérifie Ollama + Discord\n3. Teste avec **Execute workflow**, puis active le workflow\n\n⚠️ La mémoire des offres déjà vues ne s'enregistre qu'en exécution automatique.",
+        "height": 220,
+        "width": 380
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -940,
+        -600
+      ],
+      "id": "6e12e44a-c510-4e7e-9d17-1b526f753e36",
+      "name": "Note"
+    }
+  ],
+  "connections": {
+    "Tous les jours à 8h": {
+      "main": [
+        [
+          {
+            "node": "La Bonne Alternance",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Jobs (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "La Bonne Alternance": {
+      "main": [
+        [
+          {
+            "node": "Normaliser LBA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Jobs (SerpAPI)": {
+      "main": [
+        [
+          {
+            "node": "Normaliser Google Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser LBA": {
+      "main": [
+        [
+          {
+            "node": "Fusionner les sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser Google Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fusionner les sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fusionner les sources": {
+      "main": [
+        [
+          {
+            "node": "Garder les nouvelles offres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Garder les nouvelles offres": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Évaluer l'offre (IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Évaluer l'offre (IA)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Évaluer l'offre (IA)": {
+      "main": [
+        [
+          {
+            "node": "Lire la réponse IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire la réponse IA": {
+      "main": [
+        [
+          {
+            "node": "Score ≥ 3 ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score ≥ 3 ?": {
+      "main": [
+        [
+          {
+            "node": "Envoyer sur Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer sur Discord": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
